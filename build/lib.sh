@@ -67,6 +67,7 @@ function library_sources_0() {
   find \
     "$dir"/lib \
     "$dir"/externs \
+    "$dir"/extensions \
     -name '*.js' -print0
 }
 
@@ -82,8 +83,14 @@ function closure_sources_0() {
     -name '*.js' -print0
 }
 
+function optional_sources_0() {
+  find \
+    "$dir"/.. \
+    -name 'stats_overlay.js' -print0
+}
+
 function compile_0() {
-  xargs -0 java -jar "$dir"/third_party/closure/compiler.jar $closure_opts "$@"
+  xargs -0 java -Xmx512m -jar "$dir"/third_party/closure/compiler.jar $closure_opts "$@"
 }
 
 function lint_0() {
@@ -94,4 +101,3 @@ function lint_0() {
     --custom_jsdoc_tags $jsdoc3_tags \
     --strict "$@" 1>&2
 }
-
