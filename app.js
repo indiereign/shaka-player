@@ -96,6 +96,14 @@ app.offlineStreams_ = [];
 
 
 /**
+ * Reference to the stats overlay
+ *
+ * @private {shaka.StatsOverlay}
+ */
+app.stats_overlay_;
+
+
+/**
  * Initializes the application.
  */
 app.init = function() {
@@ -880,6 +888,13 @@ app.initPlayer_ = function() {
 
   // Load the adaptation setting.
   app.onAdaptationChange();
+
+  app.stats_overlay_ = new shaka.StatsOverlay();
+  app.stats_overlay_.init(
+    app.player_,
+    document.getElementById('overlay'),
+    /** @type {!HTMLVideoElement} */ (document.getElementById('video')));
+  app.stats_overlay_.refresh(true);
 };
 
 
