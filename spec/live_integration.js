@@ -24,6 +24,7 @@ goog.require('shaka.util.EventManager');
 
 describe('Player', function() {
   var originalTimeout;
+  var originalSend;
   var video;
   var videoSource;
   var player;
@@ -45,8 +46,8 @@ describe('Player', function() {
   const segmentNumberPlusFiveMpd =
       segmentNumberDir + 'oops-segment-timeline-number-oops_video_plus_5.mpd';
 
-  const FUDGE_FACTOR = 2;
-  const SMALL_FUDGE_FACTOR = 1;
+  const FUDGE_FACTOR = 5;
+  const SMALL_FUDGE_FACTOR = 2;
   const SEEK_OFFSET = 10000;
 
   beforeAll(function() {
@@ -66,8 +67,25 @@ describe('Player', function() {
     video.crossOrigin = 'anonymous';
     video.width = 600;
     video.height = 400;
+
     // Add it to the DOM.
     document.body.appendChild(video);
+
+    // Hijack MpdRequest to set @availabilityStartTime for all MPDs from
+    // Cloud Storage to simulate dynamically generated MPDs.
+    // Note: currentTime - @availabilityStartTime must be at least as long as
+    // the video.
+    var availabilityStartTime = (Date.now() / 1000.0) - 300;
+    originalSend = shaka.dash.MpdRequest.prototype.send;
+    shaka.dash.MpdRequest.prototype.send = function() {
+      return originalSend.call(this).then(
+          function(mpd) {
+            if (this.url.toString().indexOf(googleStorageUrl) >= 0) {
+              mpd.availabilityStartTime = availabilityStartTime;
+            }
+            return Promise.resolve(mpd);
+          }.bind(this));
+    };
   });
 
   beforeEach(function() {
@@ -96,6 +114,9 @@ describe('Player', function() {
     // Remove the video tag from the DOM.
     document.body.removeChild(video);
 
+    // Restore send().
+    shaka.dash.MpdRequest.prototype.send = originalSend;
+
     // Restore the timeout.
     jasmine.DEFAULT_TIMEOUT_INTERVAL = originalTimeout;
 
@@ -111,16 +132,8 @@ describe('Player', function() {
     it('plays two full segments of content', function(done) {
       const SEGMENT_LENGTH = 6;
 
-      var setTestExpectations = function(segmentIndexes) {
-        console.assert(segmentIndexes.length > 0);
-        var index1 = segmentIndexes[0];
-        var index2 = segmentIndexes[1];
-
-        var min = Math.min(index1.last().startTime, index2.last().startTime);
-        var streamStartTime =
-            Math.max(min - videoSource.manifestInfo.minBufferTime, 0);
-
-        var targetTime = streamStartTime + (2 * SEGMENT_LENGTH);
+      var setTestExpectations = function() {
+        var targetTime = video.currentTime + (2 * SEGMENT_LENGTH);
         var waitTime = (2 * SEGMENT_LENGTH) + FUDGE_FACTOR;
 
         waitForTargetTime(
@@ -132,7 +145,7 @@ describe('Player', function() {
         });
       };
 
-      waitForOnAllStreamsStarted(setTestExpectations);
+      waitForBeginPlayback(setTestExpectations);
 
       player.load(videoSource).then(function() {
         video.play();
@@ -216,7 +229,7 @@ describe('Player', function() {
       });
     };
 
-    waitForOnAllStreamsStarted(setTestExpectations);
+    waitForBeginPlayback(setTestExpectations);
 
     player.load(videoSource).then(function() {
       video.play();
@@ -235,6 +248,8 @@ describe('Player', function() {
   function requestMpdUpdate(targetMpdUrl, videoSource, done) {
     player.load(videoSource).then(function() {
       video.play();
+      return waitForMovement(video, eventManager);
+    }).then(function() {
       // Seek back to ensure there is enough video to get an update.
       video.currentTime -= 10;
       return waitForMpdRequest(targetMpdUrl);
@@ -254,16 +269,30 @@ describe('Player', function() {
    * @param {!done} done The done function, to signal the end of this test.
    */
   function seekBeforeRange(videoSource, done) {
+    // There are two 'seekrangechanged' events prior to beginning the playback.
+    // The second one includes the timestamp correction.
+    var count = 0;
+
+    var continueTest = function(event) {
+      if (++count < 2) return;
+      eventManager.unlisten(videoSource, 'seekrangechanged');
+      var seekStart = event.start;
+      delay(1.0).then(function() {
+        video.currentTime = seekStart - SEEK_OFFSET;
+        return waitForMovement(video, eventManager);
+      }).then(function() {
+        expect(videoSource.video.currentTime).toBeGreaterThan(
+            seekStart - SMALL_FUDGE_FACTOR);
+        done();
+      }).catch(function(error) {
+        fail(error);
+        done();
+      });
+    };
+
+    eventManager.listen(videoSource, 'seekrangechanged', continueTest);
     player.load(videoSource).then(function() {
       video.play();
-      return waitForMovement(video, eventManager);
-    }).then(function() {
-      video.currentTime = videoSource.seekStartTime_ - SEEK_OFFSET;
-      return waitForMovement(video, eventManager);
-    }).then(function() {
-      expect(videoSource.video.currentTime).toBeGreaterThan(
-          videoSource.seekStartTime_);
-      done();
     }).catch(function(error) {
       fail(error);
       done();
@@ -277,16 +306,28 @@ describe('Player', function() {
    * @param {!done} done The done function, to signal the end of this test.
    */
   function seekAfterRange(videoSource, done) {
+    var count = 0;
+
+    var continueTest = function(event) {
+      if (++count < 2) return;
+      eventManager.unlisten(videoSource, 'seekrangechanged');
+      var seekEnd = event.end;
+      delay(1.0).then(function() {
+        video.currentTime = seekEnd + SEEK_OFFSET;
+        return waitForMovement(video, eventManager);
+      }).then(function() {
+        expect(videoSource.video.currentTime).toBeLessThan(
+            seekEnd + SMALL_FUDGE_FACTOR);
+        done();
+      }).catch(function(error) {
+        fail(error);
+        done();
+      });
+    };
+
+    eventManager.listen(videoSource, 'seekrangechanged', continueTest);
     player.load(videoSource).then(function() {
       video.play();
-      return waitForMovement(video, eventManager);
-    }).then(function() {
-      video.currentTime = videoSource.seekEndTime_ + SEEK_OFFSET;
-      return waitForMovement(video, eventManager);
-    }).then(function() {
-      expect(videoSource.video.currentTime).toBeLessThan(
-          videoSource.seekEndTime_ + SMALL_FUDGE_FACTOR);
-      done();
     }).catch(function(error) {
       fail(error);
       done();
@@ -317,15 +358,15 @@ describe('Player', function() {
   }
 
   /**
-   * Waits until onAllStreamsStarted() has been called to catch the corrected
+   * Waits until beginPlayback_() has been called to catch the corrected
    * segmentIndexes, then bind it to the given function and set a Timeout to
    * call asynchronously.
    * @param {Function} fn The function to be called with the segmentIndexes.
    */
-  function waitForOnAllStreamsStarted(fn) {
-    var originalonAllStreamsStarted = videoSource.onAllStreamsStarted;
-    videoSource.onAllStreamsStarted = function(segmentIndexes) {
-      originalonAllStreamsStarted.call(videoSource, segmentIndexes);
+  function waitForBeginPlayback(fn) {
+    var originalBeginPlayback = videoSource.beginPlayback_;
+    videoSource.beginPlayback_ = function(segmentIndexes) {
+      originalBeginPlayback.call(videoSource, segmentIndexes);
       // Do this async.
       window.setTimeout(fn.bind(null, segmentIndexes), 0);
     };

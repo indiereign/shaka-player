@@ -143,6 +143,12 @@
       </tr>
       <tr>
         <td colspan="3">
+          Enable trick play?
+          <input id="trickPlayEnabled" type="checkbox" onchange="app.onTrickPlayChange()">
+        </td>
+      </tr>
+      <tr>
+        <td colspan="3">
           Enable adaptation?
           <input id="adaptationEnabled" type="checkbox" checked onchange="app.onAdaptationChange()">
         </td>
@@ -150,12 +156,12 @@
       <tr>
         <td>Available video tracks:</td>
         <td><select id="videoTracks" onchange="app.onVideoChange()"></select></td>
-        <td><button id="cycleVideo" onclick="app.cycleVideo()">Cycle video tracks</button></td>
+        <td><input type ="checkbox" id="cycleVideo" onchange="app.cycleVideo()">Cycle video tracks</button></td>
       </tr>
       <tr>
         <td>Available audio tracks:</td>
         <td><select id="audioTracks" onchange="app.onAudioChange()"></select></td>
-        <td><button id="cycleAudio" onclick="app.cycleAudio()">Cycle audio tracks</button></td>
+        <td><input type ="checkbox" id="cycleAudio" onchange="app.cycleAudio()">Cycle audio tracks</button></td>
       </tr>
       <tr>
         <td>Available text tracks:</td>
@@ -192,7 +198,9 @@
         <input id="playButton" type="button">
         <input id="pauseButton" type="button">
         <input id="seekBar" type="range" step="any" min="0" max="1">
+        <input id="rewindButton" type="button">
         <div id="currentTime">0:00</div>
+        <input id="fastForwardButton" type="button">
         <input id="muteButton" type="button">
         <input id="unmuteButton" type="button">
         <input id="volumeBar" type="range" step="any" min="0" max="1">
