@@ -150,12 +150,12 @@ app.init = function() {
   app.bufferedBehindDebug_ = document.getElementById('bufferedBehindDebug');
   window.setInterval(app.updateDebugInfo_, 50);
 
-  var fields = location.search.split('?').pop();
+  var fields = location.search.split('?').slice(1).join('?');
   fields = fields ? fields.split(';') : [];
   var params = {};
   for (var i = 0; i < fields.length; ++i) {
     var kv = fields[i].split('=');
-    params[kv[0]] = kv[1];
+    params[kv[0]] = kv.slice(1).join('=');
   }
 
   if ('prefixed' in params) {
@@ -210,6 +210,10 @@ app.init = function() {
   if ('asset' in params) {
     document.getElementById('manifestUrlInput').value = params['asset'];
     app.onMpdCustom();
+  }
+  if ('license' in params) {
+    document.getElementById('wvLicenseServerUrlInput').value =
+        params['license'];
   }
 
   if ('dash' in params) {
@@ -311,13 +315,14 @@ app.checkMpdStorageStatus_ = function() {
 /**
  * Called when a new video track is selected.
  *
- * @param {boolean=} opt_immediate
+ * @param {boolean=} opt_clearBuffer If true (and by default), removes the
+ *     previous stream's content before switching to the new stream.
  */
-app.onVideoChange = function(opt_immediate) {
+app.onVideoChange = function(opt_clearBuffer) {
   var id = document.getElementById('videoTracks').value;
   document.getElementById('adaptationEnabled').checked = false;
   app.onAdaptationChange();
-  app.player_.selectVideoTrack(id, opt_immediate);
+  app.player_.selectVideoTrack(id, opt_clearBuffer);
 };
 
 
@@ -339,17 +344,20 @@ app.onTrickPlayChange = function() {
 app.onAdaptationChange = function() {
   var enabled = document.getElementById('adaptationEnabled').checked;
   if (app.player_) {
-    app.player_.enableAdaptation(enabled);
+    app.player_.configure({'enableAdaptation': enabled});
   }
 };
 
 
 /**
  * Called when a new audio track is selected.
+ *
+ * @param {boolean=} opt_clearBuffer If true (and by default), removes the
+ *     previous stream's content before switching to the new stream.
  */
-app.onAudioChange = function() {
+app.onAudioChange = function(opt_clearBuffer) {
   var id = document.getElementById('audioTracks').value;
-  app.player_.selectAudioTrack(id);
+  app.player_.selectAudioTrack(id, opt_clearBuffer);
 };
 
 
@@ -369,7 +377,7 @@ app.onTextChange = function() {
  */
 app.cycleAudio = function() {
   app.cycleTracks_('cycleAudio', 'audioTracks', 3, function() {
-    app.onAudioChange();
+    app.onAudioChange(false);
   }, false);
 };
 
@@ -745,7 +753,7 @@ app.load_ = function(videoSource) {
   console.assert(app.player_ != null);
 
   var preferredLanguage = document.getElementById('preferredLanguage').value;
-  app.player_.setPreferredLanguage(preferredLanguage);
+  app.player_.configure({'preferredLanguage': preferredLanguage});
 
   app.player_.load(videoSource).then(app.breakOutOfPromise_(
       function() {
@@ -944,9 +952,9 @@ app.initPlayer_ = function() {
 
   app.stats_overlay_ = new shaka.StatsOverlay();
   app.stats_overlay_.init(
-    app.player_,
-    document.getElementById('overlay'),
-    /** @type {!HTMLVideoElement} */ (document.getElementById('video')));
+      app.player_,
+      document.getElementById('overlay'),
+      /** @type {!HTMLVideoElement} */ (document.getElementById('video')));
   app.stats_overlay_.refresh(true);
 };
 
@@ -1091,9 +1099,9 @@ app.postProcessYouTubeLicenseResponse_ = function(response) {
         if (types.indexOf('HD') == -1) {
           // This license will not permit HD playback.
           console.info('HD disabled.');
-          var restrictions = app.player_.getRestrictions();
+          var restrictions = app.player_.getConfiguration()['restrictions'];
           restrictions.maxHeight = 576;
-          app.player_.setRestrictions(restrictions);
+          app.player_.configure({'restrictions': restrictions});
         }
       }
     }
