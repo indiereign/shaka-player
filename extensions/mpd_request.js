@@ -19,7 +19,7 @@ shaka.dash.MpdRequest.prototype.send = function() {
         if (mpd) {
 
           // fix the buffer time
-          mpd.minBufferTime = 30.0;
+          mpd.minBufferTime = 15.0;
           return Promise.resolve(mpd);
         }
 
